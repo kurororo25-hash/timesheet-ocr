@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>勤務表 画像読み取り＆集計</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --border: #dcdfe4;
+    --text: #222;
+    --sub: #666;
+    --accent: #2d6cdf;
+    --accent-dark: #1e4fa8;
+    --danger: #c0392b;
+    --ok: #1a7f37;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 12px;
+    padding-bottom: 60px;
+  }
+  h1 { font-size: 1.3rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; color: var(--accent-dark); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  label { font-size: 0.85rem; color: var(--sub); display: block; margin-bottom: 4px; }
+  input[type="text"], input[type="password"], input[type="number"], select {
+    font-size: 1rem;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 100%;
+  }
+  input[type="file"] { font-size: 0.9rem; }
+  button {
+    font-size: 0.95rem;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  button:active { background: var(--accent-dark); }
+  button.secondary { background: #eee; color: var(--text); border: 1px solid var(--border); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .hint { font-size: 0.8rem; color: var(--sub); margin-top: 6px; }
+  .error { color: var(--danger); font-size: 0.85rem; white-space: pre-wrap; }
+  .status { font-size: 0.85rem; color: var(--sub); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+  th, td { border: 1px solid var(--border); padding: 4px; text-align: center; }
+  th { background: #eef2f9; }
+  td input, td select { width: 100%; padding: 4px; font-size: 0.85rem; border: 1px solid transparent; background: transparent; }
+  td input:focus, td select:focus { border: 1px solid var(--accent); background: #fff; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .summary-item { background: #f8f9fb; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .summary-item .label { font-size: 0.8rem; color: var(--sub); }
+  .summary-item .value { font-size: 1.2rem; font-weight: bold; }
+  details.advanced { margin-top: 10px; font-size: 0.85rem; }
+  img#preview { max-width: 100%; border-radius: 8px; margin-top: 8px; border: 1px solid var(--border); }
+  .note-red { color: var(--danger); font-size: 0.8rem; }
+</style>
+</head>
+<body>
+
+<h1>勤務表 画像読み取り＆集計</h1>
+<p class="hint">手書きの勤務表を撮影・アップロードすると、AI(Google Gemini)が内容を読み取り、合計時間・区分ごとの集計を自動計算します。読み取り結果は必ず自分の目でも確認・修正してください。</p>
+
+<div class="card">
+  <h2>1. APIキー設定</h2>
+  <label for="apiKey">Google Gemini APIキー</label>
+  <input type="password" id="apiKey" placeholder="AIza... で始まるキー">
+  <div class="row" style="margin-top:8px;">
+    <button id="saveKeyBtn">保存</button>
+    <button class="secondary" id="clearKeyBtn">削除</button>
+    <span class="status" id="keyStatus"></span>
+  </div>
+  <p class="hint">キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で無料発行できます(クレジットカード登録不要)。このキーはこの端末のブラウザ内(localStorage)にのみ保存され、外部には送信されません(画像を読み取るときだけGoogleのサーバーに送られます)。</p>
+  <details class="advanced">
+    <summary>詳細設定(モデル名)</summary>
+    <label for="modelName" style="margin-top:8px;">使用モデル</label>
+    <input type="text" id="modelName" value="gemini-3.6-flash">
+    <p class="hint">無料枠のモデル名は変更されることがあります。エラーが出る場合はここを最新のモデル名に書き換えてください。</p>
+  </details>
+</div>
+
+<div class="card">
+  <h2>2. 画像を選択</h2>
+  <input type="file" id="imageInput" accept="image/*" capture="environment">
+  <img id="preview" style="display:none;">
+  <div class="row" style="margin-top:10px;">
+    <button id="readBtn" disabled>読み取り開始</button>
+    <span class="status" id="readStatus"></span>
+  </div>
+  <div class="error" id="errorBox"></div>
+</div>
+
+<div class="card" id="resultCard" style="display:none;">
+  <h2>3. 読み取り結果(修正できます)</h2>
+  <div style="overflow-x:auto;">
+    <table id="resultTable">
+      <thead>
+        <tr>
+          <th>日付</th><th>開始</th><th>終了</th><th>残業</th><th>合計</th><th>発送</th><th>備考</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="resultBody"></tbody>
+    </table>
+  </div>
+  <div class="row" style="margin-top:10px;">
+    <button class="secondary" id="addRowBtn">行を追加</button>
+    <button class="secondary" id="csvBtn">CSVダウンロード</button>
+  </div>
+</div>
+
+<div class="card" id="summaryCard" style="display:none;">
+  <h2>4. 集計</h2>
+  <div class="summary-grid">
+    <div class="summary-item"><div class="label">合計時間</div><div class="value" id="sumTotal">-</div></div>
+    <div class="summary-item"><div class="label">許 合計</div><div class="value" id="sumKyo">-</div></div>
+    <div class="summary-item"><div class="label">倉 合計</div><div class="value" id="sumKura">-</div></div>
+    <div class="summary-item"><div class="label">その他区分</div><div class="value" id="sumOther">-</div></div>
+  </div>
+  <div class="row" style="margin-top:12px;">
+    <div style="flex:1;min-width:140px;">
+      <label for="hourlyWage">時給(円)</label>
+      <input type="number" id="hourlyWage" value="1800">
+    </div>
+    <div style="flex:1;min-width:140px;">
+      <label>&nbsp;</label>
+      <div class="summary-item"><div class="label">許 × 時給</div><div class="value" id="sumYen">-</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const KEY_STORAGE = 'timesheetocr_apikey';
+const MODEL_STORAGE = 'timesheetocr_model';
+
+const apiKeyInput = document.getElementById('apiKey');
+const modelNameInput = document.getElementById('modelName');
+const keyStatus = document.getElementById('keyStatus');
+const readBtn = document.getElementById('readBtn');
+const readStatus = document.getElementById('readStatus');
+const errorBox = document.getElementById('errorBox');
+const imageInput = document.getElementById('imageInput');
+const preview = document.getElementById('preview');
+const resultCard = document.getElementById('resultCard');
+const resultBody = document.getElementById('resultBody');
+const summaryCard = document.getElementById('summaryCard');
+const hourlyWage = document.getElementById('hourlyWage');
+
+let selectedFile = null;
+
+// --- API key persistence ---
+const DEFAULT_MODEL = 'gemini-3.6-flash';
+const DEPRECATED_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+
+function loadKey() {
+  const k = localStorage.getItem(KEY_STORAGE);
+  if (k) { apiKeyInput.value = k; keyStatus.textContent = '保存済み'; }
+  const m = localStorage.getItem(MODEL_STORAGE);
+  if (m && !DEPRECATED_MODELS.includes(m)) {
+    modelNameInput.value = m;
+  } else {
+    // 古い(廃止された)モデル名が保存されていた場合は自動的に既定値へ直す
+    modelNameInput.value = DEFAULT_MODEL;
+    localStorage.setItem(MODEL_STORAGE, DEFAULT_MODEL);
+  }
+}
+function saveKeyAndModel() {
+  localStorage.setItem(KEY_STORAGE, apiKeyInput.value.trim());
+  localStorage.setItem(MODEL_STORAGE, modelNameInput.value.trim());
+  keyStatus.textContent = '保存しました';
+}
+document.getElementById('saveKeyBtn').addEventListener('click', saveKeyAndModel);
+document.getElementById('clearKeyBtn').addEventListener('click', () => {
+  localStorage.removeItem(KEY_STORAGE);
+  apiKeyInput.value = '';
+  keyStatus.textContent = '削除しました';
+});
+// 入力欄を変更しただけで自動保存(保存ボタンを押し忘れても次回に引き継がれる)
+apiKeyInput.addEventListener('change', saveKeyAndModel);
+modelNameInput.addEventListener('change', saveKeyAndModel);
+loadKey();
+
+// --- image selection ---
+imageInput.addEventListener('change', () => {
+  const file = imageInput.files[0];
+  if (!file) return;
+  selectedFile = file;
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = 'block';
+  readBtn.disabled = false;
+  errorBox.textContent = '';
+});
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    rows: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "日付(例: 1, 2, ...31)。曜日名は含めない" },
+          start: { type: "string", description: "開始時刻(例: 5:30)。記入がなければ空文字" },
+          end: { type: "string", description: "終了時刻(例: 14:40)。記入がなければ空文字" },
+          overtime: { type: "string", description: "残業時間の数値(例: 1, 0.5)。空欄なら空文字" },
+          total: { type: "string", description: "合計時間の数値(例: 9.5)。空欄なら空文字" },
+          category: { type: "string", description: "発送欄の区分。「許」または「倉」、読めない場合は「不明」、その日が休みで記入がない場合は「休」" },
+          note: { type: "string", description: "修正跡・判読困難・確信が持てない点があれば具体的に記述。問題なければ空文字" }
+        },
+        required: ["date", "category"]
+      }
+    }
+  },
+  required: ["rows"]
+};
+
+const PROMPT = `これは日本の手書きの勤務表(タイムシート)の画像です。表の列は「日付」「開始時間」「終了時間」「残業」「合計」「発送」です。
+各日付の行について、開始時間・終了時間・残業・合計・発送(許または倉)を正確に読み取ってください。
+
+注意点:
+- 手書きの数字・文字は崩れていることがあります。文脈(前後の日付の値のパターンなど)も参考にして最も可能性の高い値を選んでください。
+- 修正・二重線・書き直しの跡がある場合は、最終的に確定していると思われる値(丸で囲まれている、上書きされている等)を採用し、その旨をnoteに書いてください。
+- 判読に自信が持てない場合も推測した値を入れた上で、noteに「不明瞭」等と記載してください。
+- 日付欄が空欄、または斜線が引かれているだけの行(休みの日)は、category を "休" とし、他の項目は空文字にしてください。
+- 出力は指定されたJSON形式のみで、説明文は不要です。`;
+
+async function callGemini(base64Image, mimeType, apiKey, modelName) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const body = {
+    contents: [{
+      parts: [
+        { text: PROMPT },
+        { inline_data: { mime_type: mimeType, data: base64Image } }
+      ]
+    }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: RESPONSE_SCHEMA
+    }
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = (data && data.error && data.error.message) ? data.error.message : JSON.stringify(data);
+    throw new Error(`APIエラー(${res.status}): ${msg}`);
+  }
+  const cand = data.candidates && data.candidates[0];
+  if (!cand || !cand.content || !cand.content.parts || !cand.content.parts[0]) {
+    throw new Error('応答の形式が想定と違います: ' + JSON.stringify(data).slice(0, 500));
+  }
+  const text = cand.content.parts[0].text;
+  return JSON.parse(text);
+}
+
+readBtn.addEventListener('click', async () => {
+  errorBox.textContent = '';
+  const apiKey = apiKeyInput.value.trim();
+  const modelName = modelNameInput.value.trim() || DEFAULT_MODEL;
+  if (!apiKey) {
+    errorBox.textContent = 'APIキーを入力・保存してください。';
+    return;
+  }
+  if (!selectedFile) return;
+
+  readBtn.disabled = true;
+  readStatus.textContent = '読み取り中... (数秒〜十数秒かかります)';
+
+  try {
+    const base64 = await fileToBase64(selectedFile);
+    const mimeType = selectedFile.type || 'image/jpeg';
+    const parsed = await callGemini(base64, mimeType, apiKey, modelName);
+    renderRows(parsed.rows || []);
+    readStatus.textContent = '読み取り完了。内容を確認・修正してください。';
+  } catch (e) {
+    console.error(e);
+    errorBox.textContent = '読み取りに失敗しました。\n' + e.message;
+    readStatus.textContent = '';
+  } finally {
+    readBtn.disabled = false;
+  }
+});
+
+// --- result table ---
+function renderRows(rows) {
+  resultBody.innerHTML = '';
+  rows.forEach(r => addRow(r));
+  resultCard.style.display = 'block';
+  summaryCard.style.display = 'block';
+  recalc();
+}
+
+function addRow(r) {
+  r = r || { date: '', start: '', end: '', overtime: '', total: '', category: '', note: '' };
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="c-date" value="${escapeHtml(r.date || '')}" style="width:3em;"></td>
+    <td><input type="text" class="c-start" value="${escapeHtml(r.start || '')}" style="width:4.5em;"></td>
+    <td><input type="text" class="c-end" value="${escapeHtml(r.end || '')}" style="width:4.5em;"></td>
+    <td><input type="text" class="c-overtime" value="${escapeHtml(r.overtime || '')}" style="width:3em;"></td>
+    <td><input type="text" class="c-total" value="${escapeHtml(r.total || '')}" style="width:3em;"></td>
+    <td>
+      <select class="c-category">
+        <option value="許" ${r.category === '許' ? 'selected' : ''}>許</option>
+        <option value="倉" ${r.category === '倉' ? 'selected' : ''}>倉</option>
+        <option value="休" ${r.category === '休' ? 'selected' : ''}>休</option>
+        <option value="不明" ${r.category === '不明' ? 'selected' : ''}>不明</option>
+      </select>
+    </td>
+    <td><input type="text" class="c-note" value="${escapeHtml(r.note || '')}" style="width:8em;"></td>
+    <td><button class="secondary del-btn">×</button></td>
+  `;
+  tr.querySelectorAll('input, select').forEach(el => el.addEventListener('input', recalc));
+  tr.querySelector('.del-btn').addEventListener('click', () => { tr.remove(); recalc(); });
+  resultBody.appendChild(tr);
+}
+
+document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+hourlyWage.addEventListener('input', recalc);
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function recalc() {
+  let total = 0, kyo = 0, kura = 0, other = 0;
+  resultBody.querySelectorAll('tr').forEach(tr => {
+    const t = parseFloat(tr.querySelector('.c-total').value);
+    const cat = tr.querySelector('.c-category').value;
+    if (!isNaN(t)) {
+      total += t;
+      if (cat === '許') kyo += t;
+      else if (cat === '倉') kura += t;
+      else if (cat !== '休') other += t;
+    }
+  });
+  document.getElementById('sumTotal').textContent = round1(total) + ' 時間';
+  document.getElementById('sumKyo').textContent = round1(kyo) + ' 時間';
+  document.getElementById('sumKura').textContent = round1(kura) + ' 時間';
+  document.getElementById('sumOther').textContent = round1(other) + ' 時間';
+
+  const wage = parseFloat(hourlyWage.value);
+  if (!isNaN(wage) && wage > 0) {
+    document.getElementById('sumYen').textContent = Math.round(kyo * wage).toLocaleString() + ' 円';
+  } else {
+    document.getElementById('sumYen').textContent = '-';
+  }
+}
+
+function round1(n) {
+  return Math.round(n * 10) / 10;
+}
+
+// --- CSV export ---
+document.getElementById('csvBtn').addEventListener('click', () => {
+  const headers = ['日付','開始','終了','残業','合計','発送','備考'];
+  const lines = [headers.join(',')];
+  resultBody.querySelectorAll('tr').forEach(tr => {
+    const vals = [
+      tr.querySelector('.c-date').value,
+      tr.querySelector('.c-start').value,
+      tr.querySelector('.c-end').value,
+      tr.querySelector('.c-overtime').value,
+      tr.querySelector('.c-total').value,
+      tr.querySelector('.c-category').value,
+      tr.querySelector('.c-note').value
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`);
+    lines.push(vals.join(','));
+  });
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '勤務表.csv';
+  a.click();
+});
+</script>
+</body>
+</html>
