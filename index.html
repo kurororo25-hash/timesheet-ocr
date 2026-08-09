@@ -122,7 +122,7 @@
     <table id="resultTable">
       <thead>
         <tr>
-          <th>日付</th><th>開始</th><th>終了</th><th>残業</th><th>合計</th><th>発送</th><th>備考</th><th></th>
+          <th>日付</th><th>曜日</th><th>開始</th><th>終了</th><th>残業</th><th>合計</th><th>発送</th><th>備考</th><th></th>
         </tr>
       </thead>
       <tbody id="resultBody"></tbody>
@@ -277,6 +277,7 @@ const RESPONSE_SCHEMA = {
         type: "object",
         properties: {
           date: { type: "string", description: "日付(例: 1, 2, ...31)。曜日名は含めない" },
+          weekday: { type: "string", description: "日付のすぐ横に書かれている曜日一文字(月・火・水・木・金・土・日のいずれか)。書かれていなければ空文字" },
           start: { type: "string", description: "開始時刻(例: 5:30)。記入がなければ空文字" },
           end: { type: "string", description: "終了時刻(例: 14:40)。記入がなければ空文字" },
           overtime: { type: "string", description: "残業時間の数値(例: 1, 0.5)。空欄なら空文字" },
@@ -284,23 +285,24 @@ const RESPONSE_SCHEMA = {
           category: { type: "string", description: "発送欄の区分。「許」または「倉」、読めない場合は「不明」、その日が休みで記入がない場合は「休」" },
           note: { type: "string", description: "修正跡・判読困難・確信が持てない点があれば具体的に記述。問題なければ空文字" }
         },
-        required: ["date", "start", "end", "overtime", "total", "category", "note"]
+        required: ["date", "weekday", "start", "end", "overtime", "total", "category", "note"]
       }
     }
   },
   required: ["month", "rows"]
 };
 
-const PROMPT = `これは日本の手書きの勤務表(タイムシート)の画像です。表の左上には対象の月(例:「7月」)が書かれています。表の列は左から順に「日付」「開始時間」「終了時間」「残業」「合計」「発送」です。
+const PROMPT = `これは日本の手書きの勤務表(タイムシート)の画像です。表の左上には対象の月(例:「7月」)が書かれています。表の列は左から順に「日付」「開始時間」「終了時間」「残業」「合計」「発送」です。日付の数字のすぐ横には、手書きで曜日(月・火・水・木・金・土・日のいずれか一文字)が書き添えられています。
 
 まず、表の左上に書かれている月の数字を読み取り、month に入れてください(「7月」なら "7" のように数字だけ)。
 
-各日付の行について、以下の5項目を1つずつ、必ずすべて確認してから出力してください。
-1. 開始時間
-2. 終了時間 ← 見落としやすい列です。「開始時間」の隣にあります。必ず値の有無を確認してください。
-3. 残業 ← これも見落としやすい列です。「終了時間」の隣、「合計」の左にあります。必ず値の有無を確認してください。
-4. 合計
-5. 発送(許または倉)
+各日付の行について、以下の6項目を1つずつ、必ずすべて確認してから出力してください。
+1. 曜日 ← 日付の数字のすぐ横(通常は左)に書かれている一文字です。weekday に入れてください。
+2. 開始時間
+3. 終了時間 ← 見落としやすい列です。「開始時間」の隣にあります。必ず値の有無を確認してください。
+4. 残業 ← これも見落としやすい列です。「終了時間」の隣、「合計」の左にあります。必ず値の有無を確認してください。
+5. 合計
+6. 発送(許または倉)
 
 出力するJSONで end や overtime を空文字にするのは、実際にその欄に何も書かれていない(本当に空欄)場合だけにしてください。値が書いてあるのに読み取れなかった・自信がない、という場合は空文字にせず、読み取れる範囲の推測値を入れた上でnoteに「不明瞭」等と記載してください。
 
@@ -464,10 +466,11 @@ function renderRows(rows) {
 }
 
 function addRow(r) {
-  r = r || { date: '', start: '', end: '', overtime: '', total: '', category: '', note: '' };
+  r = r || { date: '', weekday: '', start: '', end: '', overtime: '', total: '', category: '', note: '' };
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input type="text" class="c-date" value="${escapeHtml(r.date || '')}" style="width:3em;"></td>
+    <td><input type="text" class="c-weekday" value="${escapeHtml(r.weekday || '')}" style="width:2.5em;"></td>
     <td><input type="text" class="c-start" value="${escapeHtml(r.start || '')}" style="width:4.5em;"></td>
     <td><input type="text" class="c-end" value="${escapeHtml(r.end || '')}" style="width:4.5em;"></td>
     <td><input type="text" class="c-overtime" value="${escapeHtml(r.overtime || '')}" style="width:3em;"></td>
@@ -537,11 +540,12 @@ function round1(n) {
 
 // --- CSV export ---
 document.getElementById('csvBtn').addEventListener('click', () => {
-  const headers = ['日付','開始','終了','残業','合計','発送','備考'];
+  const headers = ['日付','曜日','開始','終了','残業','合計','発送','備考'];
   const lines = [headers.join(',')];
   resultBody.querySelectorAll('tr').forEach(tr => {
     const vals = [
       tr.querySelector('.c-date').value,
+      tr.querySelector('.c-weekday').value,
       tr.querySelector('.c-start').value,
       tr.querySelector('.c-end').value,
       tr.querySelector('.c-overtime').value,
