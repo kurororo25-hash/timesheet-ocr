@@ -112,6 +112,12 @@
 
 <div class="card" id="resultCard" style="display:none;">
   <h2>3. 読み取り結果(修正できます)</h2>
+  <div class="row" style="margin-bottom:10px;">
+    <div style="flex:1;min-width:120px;">
+      <label for="targetMonth">対象月(表の左上から読み取り。違っていれば修正してください)</label>
+      <input type="text" id="targetMonth" placeholder="例: 7">
+    </div>
+  </div>
   <div style="overflow-x:auto;">
     <table id="resultTable">
       <thead>
@@ -146,10 +152,31 @@
       <div class="summary-item"><div class="label">許 × 時給</div><div class="value" id="sumYen">-</div></div>
     </div>
   </div>
+  <div class="row" style="margin-top:12px;">
+    <button id="saveSummaryBtn">この集計を対象月つきで記録する</button>
+    <span class="status" id="saveSummaryStatus"></span>
+  </div>
+</div>
+
+<div class="card" id="summaryLogCard">
+  <h2>5. 集計の記録</h2>
+  <p class="hint">「記録する」を押すたびに、記録日時・対象月・その時点の集計結果をこの端末に保存します(localStorage内のみ)。月ごとの実績を後から見返せます。</p>
+  <div class="row" style="margin-bottom:8px;">
+    <button class="secondary" id="downloadSummaryLogBtn">CSVダウンロード</button>
+    <button class="secondary" id="clearSummaryLogBtn">全て削除</button>
+  </div>
+  <div style="overflow-x:auto;">
+    <table id="summaryLogTable">
+      <thead>
+        <tr><th>記録日時</th><th>対象月</th><th>合計</th><th>許</th><th>倉</th><th>その他</th><th>許×時給</th><th></th></tr>
+      </thead>
+      <tbody id="summaryLogBody"></tbody>
+    </table>
+  </div>
 </div>
 
 <div class="card" id="logCard">
-  <h2>5. 読み取りログ</h2>
+  <h2>6. 読み取りログ</h2>
   <p class="hint">画像を読み取るたびに、日時・ファイル名・結果(成功時はAIの返答内容、失敗時はエラー内容)をこの端末に自動で記録します(localStorage内のみ。他の端末やサーバーには送られません)。最新50件まで保持します。</p>
   <div class="row" style="margin-bottom:8px;">
     <button class="secondary" id="downloadLogBtn">ログをダウンロード</button>
@@ -175,6 +202,10 @@ const resultCard = document.getElementById('resultCard');
 const resultBody = document.getElementById('resultBody');
 const summaryCard = document.getElementById('summaryCard');
 const hourlyWage = document.getElementById('hourlyWage');
+const targetMonthInput = document.getElementById('targetMonth');
+const saveSummaryBtn = document.getElementById('saveSummaryBtn');
+const saveSummaryStatus = document.getElementById('saveSummaryStatus');
+const summaryLogBody = document.getElementById('summaryLogBody');
 const logList = document.getElementById('logList');
 const logStatus = document.getElementById('logStatus');
 
@@ -239,6 +270,7 @@ function fileToBase64(file) {
 const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
+    month: { type: "string", description: "表の左上に書かれている「◯月」の月の数字だけ(例: 7)。西暦年や日付など他の数字と混同しないこと。書かれていない・読み取れない場合は空文字" },
     rows: {
       type: "array",
       items: {
@@ -256,10 +288,12 @@ const RESPONSE_SCHEMA = {
       }
     }
   },
-  required: ["rows"]
+  required: ["month", "rows"]
 };
 
-const PROMPT = `これは日本の手書きの勤務表(タイムシート)の画像です。表の列は左から順に「日付」「開始時間」「終了時間」「残業」「合計」「発送」です。
+const PROMPT = `これは日本の手書きの勤務表(タイムシート)の画像です。表の左上には対象の月(例:「7月」)が書かれています。表の列は左から順に「日付」「開始時間」「終了時間」「残業」「合計」「発送」です。
+
+まず、表の左上に書かれている月の数字を読み取り、month に入れてください(「7月」なら "7" のように数字だけ)。
 
 各日付の行について、以下の5項目を1つずつ、必ずすべて確認してから出力してください。
 1. 開始時間
@@ -328,6 +362,7 @@ readBtn.addEventListener('click', async () => {
     const mimeType = selectedFile.type || 'image/jpeg';
     const parsed = await callGemini(base64, mimeType, apiKey, modelName);
     renderRows(parsed.rows || []);
+    targetMonthInput.value = parsed.month || '';
     readStatus.textContent = '読み取り完了。内容を確認・修正してください。';
     addLogEntry({
       timestamp: new Date().toISOString(),
@@ -460,6 +495,10 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Latest computed totals, kept in sync by recalc() so other features
+// (recording a summary snapshot) can read them without recomputing.
+let currentSummary = { total: 0, kyo: 0, kura: 0, other: 0, wage: null, yen: null };
+
 function recalc() {
   let total = 0, kyo = 0, kura = 0, other = 0;
   resultBody.querySelectorAll('tr').forEach(tr => {
@@ -478,11 +517,18 @@ function recalc() {
   document.getElementById('sumOther').textContent = round1(other) + ' 時間';
 
   const wage = parseFloat(hourlyWage.value);
+  let yen = null;
   if (!isNaN(wage) && wage > 0) {
-    document.getElementById('sumYen').textContent = Math.round(kyo * wage).toLocaleString() + ' 円';
+    yen = Math.round(kyo * wage);
+    document.getElementById('sumYen').textContent = yen.toLocaleString() + ' 円';
   } else {
     document.getElementById('sumYen').textContent = '-';
   }
+
+  currentSummary = {
+    total: round1(total), kyo: round1(kyo), kura: round1(kura), other: round1(other),
+    wage: (!isNaN(wage) && wage > 0) ? wage : null, yen
+  };
 }
 
 function round1(n) {
@@ -511,6 +557,96 @@ document.getElementById('csvBtn').addEventListener('click', () => {
   a.download = '勤務表.csv';
   a.click();
 });
+
+// --- summary log (localStorage): monthly totals kept with a date ---
+const SUMMARY_LOG_STORAGE = 'timesheetocr_summary_log';
+const MAX_SUMMARY_LOG_ENTRIES = 200;
+
+function loadSummaryLog() {
+  try {
+    return JSON.parse(localStorage.getItem(SUMMARY_LOG_STORAGE) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+function saveSummaryLog(log) {
+  localStorage.setItem(SUMMARY_LOG_STORAGE, JSON.stringify(log.slice(0, MAX_SUMMARY_LOG_ENTRIES)));
+}
+function renderSummaryLog() {
+  const log = loadSummaryLog();
+  if (log.length === 0) {
+    summaryLogBody.innerHTML = '<tr><td colspan="8" class="hint" style="border:none;">まだ記録はありません。</td></tr>';
+    return;
+  }
+  summaryLogBody.innerHTML = log.map((e, i) => `
+    <tr>
+      <td>${escapeHtml(formatTimestamp(e.savedAt))}</td>
+      <td>${escapeHtml(e.month || '-')}</td>
+      <td>${round1(e.total)}</td>
+      <td>${round1(e.kyo)}</td>
+      <td>${round1(e.kura)}</td>
+      <td>${round1(e.other)}</td>
+      <td>${e.yen != null ? e.yen.toLocaleString() + '円' : '-'}</td>
+      <td><button class="secondary del-summary-btn" data-index="${i}">×</button></td>
+    </tr>
+  `).join('');
+  summaryLogBody.querySelectorAll('.del-summary-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index, 10);
+      const current = loadSummaryLog();
+      current.splice(idx, 1);
+      saveSummaryLog(current);
+      renderSummaryLog();
+    });
+  });
+}
+// formatTimestamp() is already defined above (read log section) and reused here.
+
+saveSummaryBtn.addEventListener('click', () => {
+  if (resultBody.querySelectorAll('tr').length === 0) {
+    saveSummaryStatus.textContent = '先に画像を読み取ってください。';
+    return;
+  }
+  const log = loadSummaryLog();
+  log.unshift({
+    savedAt: new Date().toISOString(),
+    month: targetMonthInput.value.trim(),
+    total: currentSummary.total,
+    kyo: currentSummary.kyo,
+    kura: currentSummary.kura,
+    other: currentSummary.other,
+    wage: currentSummary.wage,
+    yen: currentSummary.yen
+  });
+  saveSummaryLog(log);
+  renderSummaryLog();
+  saveSummaryStatus.textContent = '記録しました。';
+});
+
+downloadSummaryLogBtn.addEventListener('click', () => {
+  const log = loadSummaryLog();
+  const headers = ['記録日時', '対象月', '合計', '許', '倉', 'その他', '時給', '許×時給'];
+  const lines = [headers.join(',')];
+  log.forEach(e => {
+    const vals = [
+      formatTimestamp(e.savedAt), e.month || '', e.total, e.kyo, e.kura, e.other,
+      e.wage != null ? e.wage : '', e.yen != null ? e.yen : ''
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`);
+    lines.push(vals.join(','));
+  });
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '集計の記録.csv';
+  a.click();
+});
+
+document.getElementById('clearSummaryLogBtn').addEventListener('click', () => {
+  localStorage.removeItem(SUMMARY_LOG_STORAGE);
+  renderSummaryLog();
+});
+
+renderSummaryLog();
 </script>
 </body>
 </html>
