@@ -145,6 +145,17 @@
   </div>
 </div>
 
+<div class="card" id="logCard">
+  <h2>5. 読み取りログ</h2>
+  <p class="hint">画像を読み取るたびに、日時・ファイル名・結果(成功時はAIの返答内容、失敗時はエラー内容)をこの端末に自動で記録します(localStorage内のみ。他の端末やサーバーには送られません)。最新50件まで保持します。</p>
+  <div class="row" style="margin-bottom:8px;">
+    <button class="secondary" id="downloadLogBtn">ログをダウンロード</button>
+    <button class="secondary" id="clearLogBtn">ログを削除</button>
+    <span class="status" id="logStatus"></span>
+  </div>
+  <div id="logList"></div>
+</div>
+
 <script>
 const KEY_STORAGE = 'timesheetocr_apikey';
 const MODEL_STORAGE = 'timesheetocr_model';
@@ -161,6 +172,8 @@ const resultCard = document.getElementById('resultCard');
 const resultBody = document.getElementById('resultBody');
 const summaryCard = document.getElementById('summaryCard');
 const hourlyWage = document.getElementById('hourlyWage');
+const logList = document.getElementById('logList');
+const logStatus = document.getElementById('logStatus');
 
 let selectedFile = null;
 
@@ -192,7 +205,11 @@ document.getElementById('clearKeyBtn').addEventListener('click', () => {
   keyStatus.textContent = '削除しました';
 });
 // 入力欄を変更しただけで自動保存(保存ボタンを押し忘れても次回に引き継がれる)
+// iPhone(Safari)では "change" イベント(フォーカスが外れた時のみ発火)だけだと
+// 保存されないケースがあるため、"input"(1文字入力するたび)でも保存する。
+apiKeyInput.addEventListener('input', saveKeyAndModel);
 apiKeyInput.addEventListener('change', saveKeyAndModel);
+modelNameInput.addEventListener('input', saveKeyAndModel);
 modelNameInput.addEventListener('change', saveKeyAndModel);
 loadKey();
 
@@ -291,6 +308,7 @@ readBtn.addEventListener('click', async () => {
   }
   if (!selectedFile) return;
 
+  saveKeyAndModel();
   readBtn.disabled = true;
   readStatus.textContent = '読み取り中... (数秒〜十数秒かかります)';
 
@@ -300,14 +318,95 @@ readBtn.addEventListener('click', async () => {
     const parsed = await callGemini(base64, mimeType, apiKey, modelName);
     renderRows(parsed.rows || []);
     readStatus.textContent = '読み取り完了。内容を確認・修正してください。';
+    addLogEntry({
+      timestamp: new Date().toISOString(),
+      fileName: selectedFile.name,
+      modelName,
+      status: 'success',
+      rowsCount: (parsed.rows || []).length,
+      result: parsed
+    });
   } catch (e) {
     console.error(e);
     errorBox.textContent = '読み取りに失敗しました。\n' + e.message;
     readStatus.textContent = '';
+    addLogEntry({
+      timestamp: new Date().toISOString(),
+      fileName: selectedFile ? selectedFile.name : '',
+      modelName,
+      status: 'error',
+      error: e.message
+    });
   } finally {
     readBtn.disabled = false;
   }
 });
+
+// --- read log (localStorage) ---
+const LOG_STORAGE = 'timesheetocr_log';
+const MAX_LOG_ENTRIES = 50;
+
+function loadLog() {
+  try {
+    return JSON.parse(localStorage.getItem(LOG_STORAGE) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+function saveLog(log) {
+  localStorage.setItem(LOG_STORAGE, JSON.stringify(log.slice(0, MAX_LOG_ENTRIES)));
+}
+function addLogEntry(entry) {
+  const log = loadLog();
+  log.unshift(entry);
+  saveLog(log);
+  renderLog();
+}
+function formatTimestamp(iso) {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? iso : d.toLocaleString('ja-JP');
+}
+function renderLog() {
+  const log = loadLog();
+  if (log.length === 0) {
+    logList.innerHTML = '<p class="hint">まだ読み取り履歴はありません。</p>';
+    return;
+  }
+  logList.innerHTML = log.map(entry => {
+    const isSuccess = entry.status === 'success';
+    const statusLabel = isSuccess ? `成功(${entry.rowsCount}件)` : '失敗';
+    const statusColor = isSuccess ? 'var(--ok)' : 'var(--danger)';
+    const body = isSuccess
+      ? JSON.stringify(entry.result, null, 2)
+      : (entry.error || '');
+    return `
+      <details style="margin-bottom:6px;border:1px solid var(--border);border-radius:6px;padding:6px 8px;">
+        <summary style="cursor:pointer;font-size:0.85rem;">
+          ${escapeHtml(formatTimestamp(entry.timestamp))}｜${escapeHtml(entry.fileName || '')}｜${escapeHtml(entry.modelName || '')}｜<span style="color:${statusColor};">${statusLabel}</span>
+        </summary>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-size:0.75rem;background:#f8f9fb;border-radius:6px;padding:6px;margin-top:6px;overflow-x:auto;">${escapeHtml(body)}</pre>
+      </details>
+    `;
+  }).join('');
+}
+
+document.getElementById('clearLogBtn').addEventListener('click', () => {
+  localStorage.removeItem(LOG_STORAGE);
+  renderLog();
+  logStatus.textContent = 'ログを削除しました';
+});
+
+document.getElementById('downloadLogBtn').addEventListener('click', () => {
+  const log = loadLog();
+  const blob = new Blob([JSON.stringify(log, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  a.download = `timesheetocr_log_${today}.json`;
+  a.click();
+});
+
+renderLog();
 
 // --- result table ---
 function renderRows(rows) {
