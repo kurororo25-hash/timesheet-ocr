@@ -64,6 +64,17 @@
   th { background: #eef2f9; }
   td input, td select { width: 100%; padding: 4px; font-size: 0.85rem; border: 1px solid transparent; background: transparent; }
   td input:focus, td select:focus { border: 1px solid var(--accent); background: #fff; }
+  /* 発送列が狭い画面で潰れて中身が見えなくなるのを防ぐ(実寸の幅を確保し、選択中の値を常に表示) */
+  td select.c-category {
+    width: 4.2em;
+    min-width: 4.2em;
+    border: 1px solid var(--border);
+    background: #fff;
+    -webkit-appearance: menulist;
+    appearance: menulist;
+  }
+  /* 表全体をこれ以上潰さない。狭い画面では折りたたまず横スクロールで全列を読めるようにする */
+  #resultTable { min-width: 560px; }
   .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
   .summary-item { background: #f8f9fb; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
   .summary-item .label { font-size: 0.8rem; color: var(--sub); }
