@@ -72,7 +72,7 @@
   .c-start, .c-end { width: 4.4em; }
   .c-overtime { width: 2.6em; }
   .c-total { width: 2.8em; }
-  .c-note { width: 8em; }
+  .c-note { width: 14em; }
   /* 発送(select)は潰れると値が見えなくなるので実寸幅・白背景・枠線で常に表示 */
   td select.c-category {
     width: 4em;
@@ -83,7 +83,7 @@
   }
   @media (max-width: 480px) {
     /* iPhone等: 日付〜発送を画面内に収める。備考・削除ボタンは右へスクロールして表示 */
-    #resultTable { min-width: 430px; }
+    #resultTable { min-width: 560px; }
     #resultTable th, #resultTable td { padding: 3px 1px; }
     #resultTable th { font-size: 0.75rem; }
     #resultTable td input, #resultTable td select { font-size: 0.8rem; padding: 2px 1px; }
@@ -94,7 +94,8 @@
     .c-start, .c-end { width: 4em; }
     .c-overtime { width: 2em; }
     .c-total { width: 2.2em; }
-    .c-note { width: 6em; }
+    /* 備考はスクロールして読む前提で広めに確保 */
+    .c-note { width: 16em; }
     td select.c-category { width: 3.8em; }
     #resultTable .del-btn { padding: 4px 8px; }
   }
