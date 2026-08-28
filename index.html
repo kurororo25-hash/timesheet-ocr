@@ -67,9 +67,9 @@
   /* --- 読み取り結果テーブルの列幅。発送まで一目で見えるように詰める --- */
   #resultTable { min-width: 480px; }
   #resultTable th, #resultTable td { padding: 4px 3px; }
-  .c-date { width: 2.4em; }
-  .c-weekday { width: 2em; }
-  .c-start, .c-end { width: 4.2em; }
+  .c-date { width: 2em; }
+  .c-weekday { width: 1.8em; }
+  .c-start, .c-end { width: 4.4em; }
   .c-overtime { width: 2.6em; }
   .c-total { width: 2.8em; }
   .c-note { width: 8em; }
@@ -83,16 +83,19 @@
   }
   @media (max-width: 480px) {
     /* iPhone等: 日付〜発送を画面内に収める。備考・削除ボタンは右へスクロールして表示 */
-    #resultTable { min-width: 420px; }
-    #resultTable th, #resultTable td { padding: 3px 2px; }
-    #resultTable td input, #resultTable td select { font-size: 0.8rem; }
-    .c-date { width: 1.7em; }
-    .c-weekday { width: 1.5em; }
-    .c-start, .c-end { width: 3.6em; }
-    .c-overtime { width: 2.1em; }
-    .c-total { width: 2.3em; }
+    #resultTable { min-width: 430px; }
+    #resultTable th, #resultTable td { padding: 3px 1px; }
+    #resultTable th { font-size: 0.75rem; }
+    #resultTable td input, #resultTable td select { font-size: 0.8rem; padding: 2px 1px; }
+    /* 日付は最大「31」、曜日は1文字。見える範囲でギリギリまで詰める */
+    .c-date { width: 1.6em; }
+    .c-weekday { width: 1.4em; }
+    /* 詰めた分を開始・終了へ回して「14:40」がフルで見えるように */
+    .c-start, .c-end { width: 4em; }
+    .c-overtime { width: 2em; }
+    .c-total { width: 2.2em; }
     .c-note { width: 6em; }
-    td select.c-category { width: 3.6em; }
+    td select.c-category { width: 3.8em; }
     #resultTable .del-btn { padding: 4px 8px; }
   }
   .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
@@ -153,7 +156,7 @@
     <table id="resultTable">
       <thead>
         <tr>
-          <th>日付</th><th>曜日</th><th>開始</th><th>終了</th><th>残業</th><th>合計</th><th>発送</th><th>備考</th><th></th>
+          <th>日</th><th>曜</th><th>開始</th><th>終了</th><th>残業</th><th>合計</th><th>発送</th><th>備考</th><th></th>
         </tr>
       </thead>
       <tbody id="resultBody"></tbody>
