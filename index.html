@@ -64,40 +64,36 @@
   th { background: #eef2f9; }
   td input, td select { width: 100%; padding: 4px; font-size: 0.85rem; border: 1px solid transparent; background: transparent; }
   td input:focus, td select:focus { border: 1px solid var(--accent); background: #fff; }
-  /* --- 読み取り結果テーブルの列幅。発送まで一目で見えるように詰める --- */
-  #resultTable { min-width: 480px; }
-  #resultTable th, #resultTable td { padding: 4px 3px; }
-  .c-date { width: 2em; }
-  .c-weekday { width: 1.8em; }
-  .c-start, .c-end { width: 4.4em; }
-  .c-overtime { width: 2.6em; }
-  .c-total { width: 2.8em; }
-  .c-note { width: 14em; }
-  /* 発送(select)は潰れると値が見えなくなるので実寸幅・白背景・枠線で常に表示 */
+  /* --- 読み取り結果テーブル ---
+     table-layout:fixed + colgroup で列幅を厳密に固定する。
+     こうしないと min-width の余り幅が全列へ再配分され、日付/曜日など
+     狭くしたい列まで太ってしまう(iPhoneで発送が画面外になる原因)。
+     日〜発送(左7列)の合計 = 302px。iPhoneの画面内に収まる。
+     備考(216px)と削除ボタンは右へ横スクロールで表示。 */
+  #resultTable { table-layout: fixed; width: 556px; min-width: 556px; }
+  #resultTable th, #resultTable td { padding: 4px 2px; overflow: hidden; }
+  #resultTable th { white-space: nowrap; }
+  #resultTable col.col-date     { width: 30px; }
+  #resultTable col.col-weekday  { width: 30px; }
+  #resultTable col.col-start    { width: 52px; }
+  #resultTable col.col-end      { width: 52px; }
+  #resultTable col.col-overtime { width: 42px; }
+  #resultTable col.col-total    { width: 42px; }
+  #resultTable col.col-category { width: 54px; }
+  #resultTable col.col-note     { width: 216px; }
+  #resultTable col.col-del      { width: 38px; }
+  /* 発送(select)は白背景・枠線で選択値(許/倉/休/不明)を常に表示 */
   td select.c-category {
-    width: 4em;
     border: 1px solid var(--border);
     background: #fff;
     -webkit-appearance: menulist;
     appearance: menulist;
   }
   @media (max-width: 480px) {
-    /* iPhone等: 日付〜発送を画面内に収める。備考・削除ボタンは右へスクロールして表示 */
-    #resultTable { min-width: 560px; }
     #resultTable th, #resultTable td { padding: 3px 1px; }
-    #resultTable th { font-size: 0.75rem; }
+    #resultTable th { font-size: 0.72rem; }
     #resultTable td input, #resultTable td select { font-size: 0.8rem; padding: 2px 1px; }
-    /* 日付は最大「31」、曜日は1文字。見える範囲でギリギリまで詰める */
-    .c-date { width: 1.6em; }
-    .c-weekday { width: 1.4em; }
-    /* 詰めた分を開始・終了へ回して「14:40」がフルで見えるように */
-    .c-start, .c-end { width: 4em; }
-    .c-overtime { width: 2em; }
-    .c-total { width: 2.2em; }
-    /* 備考はスクロールして読む前提で広めに確保 */
-    .c-note { width: 16em; }
-    td select.c-category { width: 3.8em; }
-    #resultTable .del-btn { padding: 4px 8px; }
+    #resultTable .del-btn { padding: 4px 6px; }
   }
   .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
   .summary-item { background: #f8f9fb; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
@@ -155,6 +151,9 @@
   </div>
   <div style="overflow-x:auto;">
     <table id="resultTable">
+      <colgroup>
+        <col class="col-date"><col class="col-weekday"><col class="col-start"><col class="col-end"><col class="col-overtime"><col class="col-total"><col class="col-category"><col class="col-note"><col class="col-del">
+      </colgroup>
       <thead>
         <tr>
           <th>日</th><th>曜</th><th>開始</th><th>終了</th><th>残業</th><th>合計</th><th>発送</th><th>備考</th><th></th>
