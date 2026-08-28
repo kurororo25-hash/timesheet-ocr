@@ -64,17 +64,37 @@
   th { background: #eef2f9; }
   td input, td select { width: 100%; padding: 4px; font-size: 0.85rem; border: 1px solid transparent; background: transparent; }
   td input:focus, td select:focus { border: 1px solid var(--accent); background: #fff; }
-  /* 発送列が狭い画面で潰れて中身が見えなくなるのを防ぐ(実寸の幅を確保し、選択中の値を常に表示) */
+  /* --- 読み取り結果テーブルの列幅。発送まで一目で見えるように詰める --- */
+  #resultTable { min-width: 480px; }
+  #resultTable th, #resultTable td { padding: 4px 3px; }
+  .c-date { width: 2.4em; }
+  .c-weekday { width: 2em; }
+  .c-start, .c-end { width: 4.2em; }
+  .c-overtime { width: 2.6em; }
+  .c-total { width: 2.8em; }
+  .c-note { width: 8em; }
+  /* 発送(select)は潰れると値が見えなくなるので実寸幅・白背景・枠線で常に表示 */
   td select.c-category {
-    width: 4.2em;
-    min-width: 4.2em;
+    width: 4em;
     border: 1px solid var(--border);
     background: #fff;
     -webkit-appearance: menulist;
     appearance: menulist;
   }
-  /* 表全体をこれ以上潰さない。狭い画面では折りたたまず横スクロールで全列を読めるようにする */
-  #resultTable { min-width: 560px; }
+  @media (max-width: 480px) {
+    /* iPhone等: 日付〜発送を画面内に収める。備考・削除ボタンは右へスクロールして表示 */
+    #resultTable { min-width: 420px; }
+    #resultTable th, #resultTable td { padding: 3px 2px; }
+    #resultTable td input, #resultTable td select { font-size: 0.8rem; }
+    .c-date { width: 1.7em; }
+    .c-weekday { width: 1.5em; }
+    .c-start, .c-end { width: 3.6em; }
+    .c-overtime { width: 2.1em; }
+    .c-total { width: 2.3em; }
+    .c-note { width: 6em; }
+    td select.c-category { width: 3.6em; }
+    #resultTable .del-btn { padding: 4px 8px; }
+  }
   .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
   .summary-item { background: #f8f9fb; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
   .summary-item .label { font-size: 0.8rem; color: var(--sub); }
@@ -480,12 +500,12 @@ function addRow(r) {
   r = r || { date: '', weekday: '', start: '', end: '', overtime: '', total: '', category: '', note: '' };
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input type="text" class="c-date" value="${escapeHtml(r.date || '')}" style="width:3em;"></td>
-    <td><input type="text" class="c-weekday" value="${escapeHtml(r.weekday || '')}" style="width:2.5em;"></td>
-    <td><input type="text" class="c-start" value="${escapeHtml(r.start || '')}" style="width:4.5em;"></td>
-    <td><input type="text" class="c-end" value="${escapeHtml(r.end || '')}" style="width:4.5em;"></td>
-    <td><input type="text" class="c-overtime" value="${escapeHtml(r.overtime || '')}" style="width:3em;"></td>
-    <td><input type="text" class="c-total" value="${escapeHtml(r.total || '')}" style="width:3em;"></td>
+    <td><input type="text" class="c-date" value="${escapeHtml(r.date || '')}"></td>
+    <td><input type="text" class="c-weekday" value="${escapeHtml(r.weekday || '')}"></td>
+    <td><input type="text" class="c-start" value="${escapeHtml(r.start || '')}"></td>
+    <td><input type="text" class="c-end" value="${escapeHtml(r.end || '')}"></td>
+    <td><input type="text" class="c-overtime" value="${escapeHtml(r.overtime || '')}"></td>
+    <td><input type="text" class="c-total" value="${escapeHtml(r.total || '')}"></td>
     <td>
       <select class="c-category">
         <option value="許" ${r.category === '許' ? 'selected' : ''}>許</option>
@@ -494,7 +514,7 @@ function addRow(r) {
         <option value="不明" ${r.category === '不明' ? 'selected' : ''}>不明</option>
       </select>
     </td>
-    <td><input type="text" class="c-note" value="${escapeHtml(r.note || '')}" style="width:8em;"></td>
+    <td><input type="text" class="c-note" value="${escapeHtml(r.note || '')}"></td>
     <td><button class="secondary del-btn">×</button></td>
   `;
   tr.querySelectorAll('input, select').forEach(el => el.addEventListener('input', recalc));
